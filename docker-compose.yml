@@ -1,0 +1,112 @@
+x-node: &node
+  build:
+    context: .
+    dockerfile: Dockerfile.node
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dsfs
+      POSTGRES_PASSWORD: dsfs
+      POSTGRES_DB: dsfs
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dsfs -d dsfs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  metadata:
+    build:
+      context: .
+      dockerfile: Dockerfile.metadata
+    environment:
+      DATABASE_URL: postgresql://dsfs:dsfs@postgres:5432/dsfs
+      REPLICATION_FACTOR: "3"
+      VNODES: "128"
+      HEARTBEAT_TIMEOUT: "15"
+      GC_INTERVAL: "10"
+      GC_GRACE_SECONDS: "60"
+    ports: ["8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  node1:
+    <<: *node
+    container_name: storage-node1
+    ports: ["9001:8000"]
+    environment:
+      NODE_ID: node1
+      NODE_URL: http://node1:8000
+      METADATA_URL: http://metadata:8000
+      HEARTBEAT_INTERVAL: "5"
+    volumes: ["node1-data:/data"]
+    depends_on:
+      metadata:
+        condition: service_started
+
+  node2:
+    <<: *node
+    container_name: storage-node2
+    ports: ["9002:8000"]
+    environment:
+      NODE_ID: node2
+      NODE_URL: http://node2:8000
+      METADATA_URL: http://metadata:8000
+      HEARTBEAT_INTERVAL: "5"
+    volumes: ["node2-data:/data"]
+    depends_on:
+      metadata:
+        condition: service_started
+
+  node3:
+    <<: *node
+    container_name: storage-node3
+    ports: ["9003:8000"]
+    environment:
+      NODE_ID: node3
+      NODE_URL: http://node3:8000
+      METADATA_URL: http://metadata:8000
+      HEARTBEAT_INTERVAL: "5"
+    volumes: ["node3-data:/data"]
+    depends_on:
+      metadata:
+        condition: service_started
+
+  node4:
+    <<: *node
+    container_name: storage-node4
+    ports: ["9004:8000"]
+    environment:
+      NODE_ID: node4
+      NODE_URL: http://node4:8000
+      METADATA_URL: http://metadata:8000
+      HEARTBEAT_INTERVAL: "5"
+    volumes: ["node4-data:/data"]
+    depends_on:
+      metadata:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  node1-data:
+  node2-data:
+  node3-data:
+  node4-data:
